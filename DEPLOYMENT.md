@@ -32,23 +32,34 @@ vercel --prod
 
 ### Alternative: Deploy from GitHub
 
-1. **Push to GitHub:**
-```bash
-git init
-git add .
-git commit -m "Initial commit"
-git remote add origin <your-github-repo>
-git push -u origin main
-```
+✅ **Already pushed to:** `https://github.com/kris07hna/DiabetesAnalyst1.0`
 
-2. **Import to Vercel:**
-- Go to [vercel.com](https://vercel.com)
-- Click "Import Project"
-- Select your GitHub repository
-- Vercel will auto-detect Next.js (frontend) and Python (api)
-- Configure root directories:
-  - Frontend: `frontend/`
-  - API: `api/`
+**Important:** Vercel can only deploy ONE project per repository. You need to create TWO separate Vercel projects:
+
+1. **Deploy Frontend (Project 1):**
+   - Go to [vercel.com](https://vercel.com)
+   - Click "Add New" → "Project"
+   - Import: `kris07hna/DiabetesAnalyst1.0`
+   - **Framework Preset:** Next.js
+   - **Root Directory:** `frontend` (click "Edit" and select this folder)
+   - Click "Deploy"
+   - After deployment, note the URL (e.g., `https://diabetes-analyst.vercel.app`)
+
+2. **Deploy Backend API (Project 2):**
+   - Go to [vercel.com](https://vercel.com) again
+   - Click "Add New" → "Project"
+   - Import **the same repository**: `kris07hna/DiabetesAnalyst1.0`
+   - **Framework Preset:** Other
+   - **Root Directory:** `api` (click "Edit" and select this folder)
+   - Click "Deploy"
+   - After deployment, note the API URL (e.g., `https://diabetes-analyst-api.vercel.app`)
+
+3. **Connect Frontend to Backend:**
+   - Go to Frontend project → Settings → Environment Variables
+   - Add: `NEXT_PUBLIC_API_URL` = `https://your-backend-api-url.vercel.app`
+   - Redeploy frontend (Deployments → ⋯ → Redeploy)
+
+**Note:** Each deployment needs its own Vercel project with different root directories.
 
 ## 📦 Local Development
 
@@ -174,6 +185,41 @@ Check Vercel Analytics for:
 - Error rates
 - Traffic patterns
 - Cold start frequency
+
+## 📸 Step-by-Step Vercel Deployment
+
+### Visual Guide for GitHub Deployment:
+
+**Step 1: Deploy Frontend**
+```
+Vercel Dashboard → Add New → Project
+├─ Select: kris07hna/DiabetesAnalyst1.0
+├─ Framework: Next.js (auto-detected)
+├─ Root Directory: Click "Edit" → Select "frontend"
+└─ Deploy → Copy URL
+```
+
+**Step 2: Deploy Backend**
+```
+Vercel Dashboard → Add New → Project
+├─ Select: kris07hna/DiabetesAnalyst1.0 (SAME REPO)
+├─ Framework: Other
+├─ Root Directory: Click "Edit" → Select "api"
+└─ Deploy → Copy URL
+```
+
+**Step 3: Link Them**
+```
+Frontend Project → Settings → Environment Variables
+├─ Variable: NEXT_PUBLIC_API_URL
+├─ Value: https://your-backend-url.vercel.app
+└─ Deployments → Redeploy
+```
+
+**Result:**
+- Frontend: `https://diabetes-analyst-frontend.vercel.app`
+- Backend: `https://diabetes-analyst-api.vercel.app`
+- Both use the same GitHub repo with different root directories!
 
 ---
 
