@@ -12,6 +12,7 @@ from pathlib import Path
 import json
 import os
 from datetime import datetime
+from functools import lru_cache
 
 # Import XGBoost at module level for CPU inference
 import xgboost as xgb
@@ -35,7 +36,17 @@ class XGBoostBoosterWrapper:
         return np.column_stack([1 - proba, proba])
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+
+# Optimized CORS for production
+CORS(app, 
+     resources={r"/*": {"origins": "*"}},
+     supports_credentials=True,
+     max_age=3600)
+
+# Response compression for faster transfers
+app.config['COMPRESS_MIMETYPES'] = ['application/json', 'text/html', 'text/css', 'application/javascript']
+app.config['COMPRESS_LEVEL'] = 6
+app.config['COMPRESS_MIN_SIZE'] = 500
 
 # Configuration - Railway uses api/ as root, local dev uses parent directory
 BASE_DIR = Path(__file__).parent
@@ -104,7 +115,7 @@ FEATURE_DESCRIPTIONS = {
 @app.route('/', methods=['GET'])
 def root():
     """Root endpoint with API information"""
-    return jsonify({
+    response = jsonify({
         'name': 'Diabetes Prediction API',
         'version': '1.0.0',
         'status': 'running',
@@ -117,16 +128,20 @@ def root():
             'feature_importance': '/feature-importance'
         }
     })
+    response.headers['Cache-Control'] = 'public, max-age=3600'
+    return response
 
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
-    return jsonify({
+    response = jsonify({
         'status': 'healthy',
         'model': MODEL_NAME if MODEL else 'not loaded',
         'model_accuracy': float(METRICS.get('accuracy', 0)) if MODEL else 0,
         'timestamp': datetime.now().isoformat()
     })
+    response.headers['Cache-Control'] = 'no-cache'
+    return response
 
 @app.route('/model-info', methods=['GET'])
 def model_info():
@@ -134,7 +149,7 @@ def model_info():
     if not MODEL:
         return jsonify({'error': 'Model not loaded'}), 500
     
-    return jsonify({
+    response = jsonify({
         'model_name': MODEL_NAME,
         'features': FEATURES,
         'feature_count': len(FEATURES),
@@ -142,6 +157,8 @@ def model_info():
         'metrics': {k: float(v) for k, v in METRICS.items()},
         'feature_descriptions': FEATURE_DESCRIPTIONS
     })
+    response.headers['Cache-Control'] = 'public, max-age=3600'
+    return response
 
 @app.route('/predict', methods=['POST'])
 def predict():

@@ -4,6 +4,7 @@ Test script for Railway deployed API
 import requests
 import json
 
+# Update this with your actual Railway URL from the dashboard
 API_URL = "https://diabetesanalyst10-production-edb2.up.railway.app"
 
 print("🧪 Testing Railway API Deployment\n")
