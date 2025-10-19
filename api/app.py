@@ -37,9 +37,16 @@ class XGBoostBoosterWrapper:
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
-# Configuration
-MODEL_PATH = Path("../models/diabetes_model.joblib")
-METADATA_PATH = Path("../models/model_metadata.json")
+# Configuration - Railway uses api/ as root, local dev uses parent directory
+BASE_DIR = Path(__file__).parent
+if (BASE_DIR / "diabetes_model.joblib").exists():
+    # Railway deployment - model in same directory as app.py
+    MODEL_PATH = BASE_DIR / "diabetes_model.joblib"
+    METADATA_PATH = BASE_DIR / "model_metadata.json"
+else:
+    # Local development - model in parent/models directory
+    MODEL_PATH = BASE_DIR.parent / "models" / "diabetes_model.joblib"
+    METADATA_PATH = BASE_DIR.parent / "models" / "model_metadata.json"
 
 # Load model and metadata
 print("🔄 Loading model...")
