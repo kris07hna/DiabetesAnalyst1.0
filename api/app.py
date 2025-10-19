@@ -450,7 +450,10 @@ def internal_error(error):
     return jsonify({'error': 'Internal server error'}), 500
 
 if __name__ == '__main__':
-    # Railway sets PORT environment variable
-    port = int(os.environ.get('PORT', 8080))
+    # Most free platforms set PORT environment variable
+    # Defaults: Railway/Render/Heroku use PORT, local dev uses 5000
+    port = int(os.environ.get('PORT', 5000))
+    debug_mode = os.environ.get('FLASK_DEBUG', 'False') == 'True'
     print(f"🚀 Starting server on port {port}")
-    app.run(host='0.0.0.0', port=port, debug=False)
+    print(f"📡 Running on: {os.environ.get('PLATFORM', 'local')}")
+    app.run(host='0.0.0.0', port=port, debug=debug_mode, threaded=True)
