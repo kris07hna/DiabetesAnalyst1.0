@@ -13,26 +13,60 @@ import joblib
 import numpy as np
 from pathlib import Path
 import json
+import sys
+
+# Import xgboost for XGBoostBoosterWrapper
+import xgboost as xgb
+
+# XGBoost Booster Wrapper (needed for model loading)
+class XGBoostBoosterWrapper:
+    """Wraps an xgboost.Booster to provide sklearn-like predict/predict_proba methods."""
+    def __init__(self, booster):
+        self.booster = booster
+
+    def predict(self, X):
+        """Predict class labels (0 or 1)"""
+        dmat = xgb.DMatrix(X)
+        proba = self.booster.predict(dmat)
+        return (proba > 0.5).astype(int)
+
+    def predict_proba(self, X):
+        """Predict class probabilities"""
+        dmat = xgb.DMatrix(X)
+        proba = self.booster.predict(dmat)
+        return np.column_stack([1 - proba, proba])
 
 def convert_to_onnx():
     """Convert XGBoost model to ONNX format."""
     
     print("🔄 Converting XGBoost model to ONNX...")
     
-    # Load the trained model
-    model_path = Path(__file__).parent.parent / "models" / "diabetes_model.joblib"
-    metadata_path = Path(__file__).parent.parent / "models" / "model_metadata.json"
+    # Register XGBoostBoosterWrapper in __main__ namespace for joblib
+    sys.modules['__main__'].XGBoostBoosterWrapper = XGBoostBoosterWrapper
+    
+    # Load the trained model (from root models/ directory)
+    model_path = Path(__file__).parent.parent.parent / "models" / "diabetes_model.joblib"
+    metadata_path = Path(__file__).parent.parent.parent / "models" / "model_metadata.json"
     
     print(f"📂 Loading model from: {model_path}")
-    model = joblib.load(model_path)
+    model_data = joblib.load(model_path)
+    
+    # Extract model from dictionary
+    model = model_data['model']
+    scaler = model_data.get('scaler')
+    features = model_data.get('features', [])
     
     # Load metadata
     with open(metadata_path, 'r') as f:
         metadata = json.load(f)
     
-    print(f"✅ Model loaded: {metadata['model_type']} v{metadata['xgboost_version']}")
-    print(f"📊 Accuracy: {metadata['accuracy']:.2%}")
-    print(f"🔢 Features: {len(metadata['feature_names'])}")
+    print(f"✅ Model loaded: {metadata.get('model_name', 'XGBoost')}")
+    print(f"📊 Accuracy: {metadata.get('metrics', {}).get('accuracy', 0):.2%}")
+    print(f"🔢 Features: {len(features) if features else len(metadata.get('features', []))}")
+    
+    # Use features from model_data if available, otherwise from metadata
+    n_features = len(features) if features else len(metadata.get('features', []))
+    feature_names = features if features else metadata.get('features', [])
     
     # Determine if it's a pipeline or raw XGBoost
     if hasattr(model, 'named_steps'):
@@ -41,8 +75,7 @@ def convert_to_onnx():
         from skl2onnx import to_onnx
         from skl2onnx.common.data_types import FloatTensorType
         
-        # Define input shape (21 features)
-        n_features = len(metadata['feature_names'])
+        # Define input shape
         initial_type = [('float_input', FloatTensorType([None, n_features]))]
         
         # Convert entire pipeline
@@ -54,24 +87,33 @@ def convert_to_onnx():
         )
         
     else:
-        # Raw XGBoost model
-        print("🔧 Detected raw XGBoost model")
+        # Raw XGBoost model or XGBoostBoosterWrapper
+        print("🔧 Detected XGBoost model")
+        
+        # Unwrap if it's a wrapper
+        if isinstance(model, XGBoostBoosterWrapper):
+            print("   Unwrapping XGBoostBoosterWrapper...")
+            xgb_model = model.booster
+        elif hasattr(model, 'get_booster'):
+            xgb_model = model.get_booster()
+        else:
+            xgb_model = model
+        
         from onnxmltools.convert import convert_xgboost
         from onnxmltools.convert.common.data_types import FloatTensorType
         
         # Define input shape
-        n_features = len(metadata['feature_names'])
         initial_type = [('float_input', FloatTensorType([None, n_features]))]
         
         # Convert XGBoost to ONNX
         onnx_model = convert_xgboost(
-            model,
+            xgb_model,
             initial_types=initial_type,
             target_opset=15
         )
     
     # Save ONNX model
-    output_path = Path(__file__).parent.parent / "mobile" / "assets" / "models" / "diabetes_model.onnx"
+    output_path = Path(__file__).parent.parent / "assets" / "models" / "diabetes_model.onnx"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
     with open(output_path, "wb") as f:
@@ -83,7 +125,7 @@ def convert_to_onnx():
     
     # Validate the ONNX model
     print("\n🔍 Validating ONNX model...")
-    validate_onnx_model(output_path, metadata['feature_names'])
+    validate_onnx_model(output_path, feature_names)
     
     # Create optimized/quantized versions
     print("\n⚡ Creating optimized versions...")
@@ -142,25 +184,31 @@ def create_optimized_models(onnx_path):
         
         # FP16 quantization (2x smaller, faster on mobile GPUs)
         fp16_path = onnx_path.parent / "diabetes_model_fp16.onnx"
-        quantize_dynamic(
-            str(onnx_path),
-            str(fp16_path),
-            weight_type=QuantType.QUInt8
-        )
-        
-        fp16_size_mb = fp16_path.stat().st_size / (1024 * 1024)
-        print(f"✅ FP16 model: {fp16_path} ({fp16_size_mb:.2f} MB)")
+        try:
+            quantize_dynamic(
+                str(onnx_path),
+                str(fp16_path),
+                weight_type=QuantType.QUInt8
+            )
+            
+            fp16_size_mb = fp16_path.stat().st_size / (1024 * 1024)
+            print(f"✅ FP16 model: {fp16_path} ({fp16_size_mb:.2f} MB)")
+        except Exception as e:
+            print(f"⚠️  FP16 quantization failed: {e}")
         
         # INT8 quantization (4x smaller, fastest on CPUs)
         int8_path = onnx_path.parent / "diabetes_model_int8.onnx"
-        quantize_dynamic(
-            str(onnx_path),
-            str(int8_path),
-            weight_type=QuantType.QInt8
-        )
-        
-        int8_size_mb = int8_path.stat().st_size / (1024 * 1024)
-        print(f"✅ INT8 model: {int8_path} ({int8_size_mb:.2f} MB)")
+        try:
+            quantize_dynamic(
+                str(onnx_path),
+                str(int8_path),
+                weight_type=QuantType.QInt8
+            )
+            
+            int8_size_mb = int8_path.stat().st_size / (1024 * 1024)
+            print(f"✅ INT8 model: {int8_path} ({int8_size_mb:.2f} MB)")
+        except Exception as e:
+            print(f"⚠️  INT8 quantization failed: {e}")
         
     except ImportError:
         print("⚠️  onnxruntime not installed, skipping quantization")
