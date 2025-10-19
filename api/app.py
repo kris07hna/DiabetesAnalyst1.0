@@ -51,6 +51,10 @@ else:
 # Load model and metadata
 print("🔄 Loading model...")
 try:
+    # Register XGBoostBoosterWrapper in __main__ namespace for joblib
+    import sys
+    sys.modules['__main__'].XGBoostBoosterWrapper = XGBoostBoosterWrapper
+    
     model_data = joblib.load(MODEL_PATH)
     MODEL = model_data['model']
     SCALER = model_data['scaler']
@@ -63,6 +67,11 @@ try:
 except Exception as e:
     print(f"❌ Error loading model: {e}")
     MODEL = None
+    SCALER = None
+    FEATURES = None
+    FEATURE_IMPORTANCE = {}
+    METRICS = {}
+    MODEL_NAME = "Not loaded"
 
 # AI recommendations use evidence-based fallback (no external API dependencies)
 print("✅ Using evidence-based recommendation system")
