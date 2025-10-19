@@ -1,0 +1,9 @@
+.env*
+*.pyc
+__pycache__/
+.vercel
+*.log
+.DS_Store
+Procfile
+railway.json
+runtime.txt
